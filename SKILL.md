@@ -1,15 +1,29 @@
 ---
 name: context-first-lookup
-description: Use when encountering anything unknown, unfamiliar, or missing — before grepping, catting, listing directories, or running any exploratory shell command. Triggers on symptoms like "I don't know where this is", "let me search for", "let me check", "I need to find". Enforces structured lookup hierarchy over random exploration.
+description: Use when encountering anything unknown, unfamiliar, or missing — before grepping, catting, listing directories, or running any exploratory shell command. Triggers on symptoms like "I don't know where this is", "let me search for", "let me check", "I need to find", "where is this defined", "file not found", "I'm not sure what this refers to". Triggers BEFORE any Bash, Grep, Glob, or Read call when the target is uncertain.
 ---
 
 # Context-First Lookup
 
 ## Overview
 
-**Never produce junk output hunting for information.** When you encounter something unknown, follow the lookup hierarchy: local context first, then semantic tools, then indexes, then — only as a last resort — targeted file search. If everything fails, propose creating an index so the question never requires exploration again.
+**Never produce junk output hunting for information.** When you encounter something unknown, follow the lookup hierarchy: local context first, then semantic search, then — only as a last resort — targeted file search. If everything fails, propose creating an index so the question never requires exploration again.
 
-**Core principle:** Every lookup should either find the answer immediately or improve the system so the next lookup will.
+**Core principle:** Every lookup should either find the answer immediately or improve the system so the next lookup will. In practice, speculative greps return irrelevant results ~80% of the time and burn 1-2K context tokens per attempt with no lasting benefit.
+
+## When to Use
+
+- You don't know where something is defined or what it refers to
+- You're about to grep, cat, ls, or read files speculatively
+- You encounter an unfamiliar term, reference, or concept in the codebase
+- An error message references something you can't immediately locate
+
+## When NOT to Use
+
+- You already know the exact file path — just read it
+- The user explicitly says "grep for X" or "search the codebase for X"
+- You're reading a file the user just pointed you to
+- You're running a build, test, or other execution command — not an information lookup
 
 ## Lookup Hierarchy
 
@@ -20,20 +34,17 @@ digraph lookup {
 
     unknown [label="Unknown reference\nencountered" shape=doublecircle];
     local [label="1. Local Context\nCLAUDE.md, memory files,\nloaded skills, conversation"];
-    tools [label="2. Semantic Tools\nstatement-mcp retrieve,\nMCP tool discovery"];
-    indexes [label="3. Indexed Collections\nstatement-mcp collections,\ningested documents"];
-    structured [label="4. Structured Search\nGlob with known patterns,\ntargeted Grep on known paths"];
-    report [label="5. Report & Plan\nExhaust report → propose\nindex creation"];
+    semantic [label="2. Semantic Search\nstatement-mcp retrieve,\nMCP tool discovery,\ncollection-filtered queries"];
+    structured [label="3. Structured Search\nGlob with known patterns,\ntargeted Grep on known paths"];
+    report [label="4. Report & Plan\nExhaust report → propose\nindex creation"];
 
     found [label="Answer found" shape=doublecircle];
 
     unknown -> local;
     local -> found [label="found"];
-    local -> tools [label="not found"];
-    tools -> found [label="found"];
-    tools -> indexes [label="not found"];
-    indexes -> found [label="found"];
-    indexes -> structured [label="not found"];
+    local -> semantic [label="not found"];
+    semantic -> found [label="found"];
+    semantic -> structured [label="not found"];
     structured -> found [label="found"];
     structured -> report [label="not found"];
 }
@@ -43,45 +54,42 @@ digraph lookup {
 
 Check what's already loaded or immediately available:
 
-| Source | How to check |
-| ------ | ------------ |
-| CLAUDE.md (global + project) | Already in context — re-read it |
-| Memory files | Read MEMORY.md index, then relevant files |
-| Loaded skills | Already in context — re-read them |
-| Conversation history | Scroll up / recall from current session |
-| Plan files | Check `docs/plans/` if a plan is active |
+| Source                       | How to check                              |
+| ---------------------------- | ----------------------------------------- |
+| CLAUDE.md (global + project) | Already in context — re-read it           |
+| Memory files                 | Read MEMORY.md index, then relevant files |
+| Loaded skills                | Already in context — re-read them         |
+| Conversation history         | Scroll up / recall from current session   |
+| Plan files                   | Check `docs/plans/` if a plan is active   |
 
 **No tool calls needed.** This is a mental check of what you already have.
 
-## Level 2: Semantic Tools
+## Level 2: Semantic Search
 
-Use tools designed for knowledge retrieval:
+Use tools designed for knowledge retrieval. Start broad, then narrow:
 
+**Broad semantic query:**
 ```
 mcp__statement-mcp__retrieve
   query: "the thing you're looking for"
   project: "current-project"        # if known
-  content_type: "all"               # or "knowledge", "document", "chat"
   mode: "semantic"                  # default hybrid search
 ```
 
-Also check:
-- `mcp__statement-mcp__status` — see what's indexed for this project
-- `mcp__memory__search_nodes` — knowledge graph entries
-- Other MCP tools that might have relevant data
-
-**Key:** Semantic search finds conceptually related content even with different wording. Always try 2-3 query phrasings before concluding nothing exists.
-
-## Level 3: Indexed Collections
-
-Check if the content is in an ingested collection:
-
+**Collection-filtered query** (when you know the content domain):
 ```
 mcp__statement-mcp__retrieve
   query: "your search"
   content_type: "document"
   tags: { "collection": "project-name" }
 ```
+
+**Discovery:**
+- `mcp__statement-mcp__status` — see what's indexed for this project
+- `mcp__memory__search_nodes` — knowledge graph entries
+- Other MCP tools that might have relevant data
+
+**Key:** Semantic search finds conceptually related content even with different wording. Always try 2-3 query phrasings before concluding nothing exists.
 
 If the project should have a collection but doesn't, **stop and ingest it first:**
 
@@ -94,9 +102,9 @@ mcp__statement-mcp__ingest_collection
 
 Then search the newly created index. This is not wasted time — it permanently solves the lookup problem.
 
-## Level 4: Structured Search (Last Code-Level Resort)
+## Level 3: Structured Search (Last Resort)
 
-Only reach this level after exhausting 1-3. When you do:
+Only reach this level after exhausting 1-2. When you do:
 
 - **Glob** for specific file patterns you expect to exist (not `**/*`)
 - **Grep** for exact strings, function names, or error messages
@@ -108,7 +116,7 @@ Only reach this level after exhausting 1-3. When you do:
 - Never `cat` a file to "take a look"
 - Every search must have a specific hypothesis: "I believe X is defined in files matching Y"
 
-## Level 5: Report & Plan
+## Level 4: Report & Plan
 
 If all levels fail, **do not keep fishing.** Instead:
 
@@ -116,7 +124,7 @@ If all levels fail, **do not keep fishing.** Instead:
 2. **Propose** an index creation plan so this lookup succeeds next time:
    - What content should be ingested?
    - What collection name and glob pattern?
-   - What tags/context should be added?
+   - What tags should be added?
    - Should a memory file be created?
 3. **Ask** the user whether to create the index now or proceed differently
 
@@ -124,27 +132,28 @@ This turns every failed lookup into a system improvement.
 
 ## Red Flags — STOP and Use the Hierarchy
 
-| Thought | Reality |
-| ------- | ------- |
-| "Let me just quickly grep for it" | Grep produces junk. Check indexes first. |
-| "I'll cat a few files to see" | Reading random files is not a strategy. Check context. |
-| "Let me ls the directory" | You don't need a listing. You need the answer. Use semantic search. |
-| "I'll search the codebase" | Search the INDEX. The codebase is not a search engine. |
-| "Let me explore a bit" | Exploration without structure wastes context. Follow the hierarchy. |
-| "This will be faster than the index" | It won't. And it won't help next time either. |
-| "The index probably doesn't have this" | Check. Don't assume. `status` takes 1 second. |
-| "I know roughly where this is" | If you know exactly, go there. If roughly, use semantic search. |
+| Thought                                | Reality                                                                   |
+| -------------------------------------- | ------------------------------------------------------------------------- |
+| "Let me just quickly grep for it"      | Grep produces junk. Check indexes first.                                  |
+| "I'll cat a few files to see"          | Reading random files is not a strategy. Check context.                    |
+| "Let me ls the directory"              | You don't need a listing. You need the answer. Use semantic search.       |
+| "I'll search the codebase"             | Search the INDEX. The codebase is not a search engine.                    |
+| "Let me explore a bit"                 | Exploration without structure wastes context. Follow the hierarchy.       |
+| "This will be faster than the index"   | It won't. And it won't help next time either.                             |
+| "The index probably doesn't have this" | Check. Don't assume. `status` takes 1 second.                             |
+| "I know roughly where this is"         | If you know exactly, go there. If roughly, use semantic search.           |
+| "Let me search the web for this"       | Web search is for external knowledge. Internal references are in indexes. |
 
 ## Common Mistakes
 
-| Mistake | Fix |
-| ------- | --- |
-| Grepping before checking statement-mcp | Always `retrieve` first, even if you think grep would be faster |
-| Using `grep -r . -l` across entire repo | Use Glob with specific pattern or semantic search |
-| Reading 10 files "to understand the codebase" | Read the index, the CLAUDE.md, the memory. Then read specific files. |
-| Not trying multiple query phrasings | Semantic search is fuzzy — rephrase 2-3 times before giving up |
-| Skipping Level 5 when stuck | Every failed lookup should create an index. Don't just move on. |
-| Ingesting but not adding context | Always `qmd context add` or add appropriate tags after ingesting |
+| Mistake                                       | Fix                                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------ |
+| Grepping before checking statement-mcp        | Always `retrieve` first, even if you think grep would be faster          |
+| Using `grep -r . -l` across entire repo       | Use Glob with specific pattern or semantic search                        |
+| Reading 10 files "to understand the codebase" | Read the index, the CLAUDE.md, the memory. Then read specific files.     |
+| Not trying multiple query phrasings           | Semantic search is fuzzy — rephrase 2-3 times before giving up           |
+| Skipping Level 4 when stuck                   | Every failed lookup should create an index. Don't just move on.          |
+| Ingesting but not adding tags                 | Always add appropriate tags (project, topic, collection) after ingesting |
 
 ## The Bottom Line
 
