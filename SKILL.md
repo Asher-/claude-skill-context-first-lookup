@@ -155,6 +155,18 @@ This turns every failed lookup into a system improvement.
 | Skipping Level 4 when stuck                   | Every failed lookup should create an index. Don't just move on.          |
 | Ingesting but not adding tags                 | Always add appropriate tags (project, topic, collection) after ingesting |
 
+## Forbidden Responses
+
+**"I don't have context" is never an acceptable answer.** Neither are variants:
+
+- "I don't have enough information to..."
+- "The context was compacted so I can't see..."
+- "I'm not sure what this refers to" (without having tried the hierarchy)
+- "I can't find that" (without exhausting all levels)
+- "I don't have access to..." (when tools exist to get it)
+
+If you're tempted to say any of these, you haven't finished the hierarchy. Go back to Level 1.
+
 ## The Bottom Line
 
 **Grep is not a knowledge system. Indexes are.**
