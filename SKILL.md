@@ -54,15 +54,29 @@ digraph lookup {
 
 Check what's already loaded or immediately available:
 
-| Source                       | How to check                              |
-| ---------------------------- | ----------------------------------------- |
-| CLAUDE.md (global + project) | Already in context — re-read it           |
-| Memory files                 | Read MEMORY.md index, then relevant files |
-| Loaded skills                | Already in context — re-read them         |
-| Conversation history         | Scroll up / recall from current session   |
-| Plan files                   | Check `docs/plans/` if a plan is active   |
+| Source                       | How to check                                                |
+| ---------------------------- | ----------------------------------------------------------- |
+| CLAUDE.md (global + project) | Already in context — re-read it                             |
+| Memory files                 | Read MEMORY.md index, then relevant files                   |
+| Loaded skills                | Already in context — re-read them                           |
+| Conversation history         | Scroll up / recall from current session                     |
+| Plan files                   | Check `docs/plans/` if a plan is active                     |
+| Recent chat history          | See below — use when you don't even know what to search for |
 
-**No tool calls needed.** This is a mental check of what you already have.
+**No tool calls needed** for the first five sources — they're a mental check of what you already have.
+
+**If you don't know what context to look for** — e.g., the user references something from a prior session with no keywords, or you're picking up work mid-stream — read recent chat history for this project and session:
+
+```
+mcp__statement-mcp__retrieve
+  query: "recent work"
+  project: "current-project"
+  content_type: "chat"
+  sort: "chronological"
+  limit: 20
+```
+
+Search by both project and session to find the right thread of work — there may be multiple sessions active in the same directory. This gives you the search terms and context needed to drive the rest of the hierarchy. Don't skip this step and jump straight to semantic search with a vague query — you'll get noise.
 
 ## Level 2: Semantic Search
 
